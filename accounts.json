@@ -1,0 +1,26 @@
+{
+  "collinsgraciano@gmail.com": {
+    "alias": "collinsgraciano@gmail.com",
+    "psid": "g.a0005gimtsxQaYlIIX6mJhKjEPG5k5uyvU6bS6vfi9Ssl6AH96txiQRaOcXnY3m9RXJHKjOIEgACgYKASASARESFQHGX2MijPub8Iye89twK35uQb3OdBoVAUF8yKpNTxR7vpgTrCTa0p9fPb450076",
+    "psidts": "sidts-CjcB7I_69MAp0b7nXtCOiI0QiaDQEa0X5uo96H9Z8GJWmSdG46RNa1bFTiZ-sWIMXwZV_M5_yOdMEAA",
+    "proxy": null,
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Accept-Language": "en-US",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Sec-Ch-Ua": "\"Chromium\";v=\"131\", \"Google Chrome\";v=\"131\", \"Not=A?Brand\";v=\"99\"",
+      "Sec-Ch-Ua-Mobile": "?0",
+      "Sec-Ch-Ua-Platform": "\"Windows\"",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "same-origin",
+      "Sec-Fetch-User": "?1",
+      "Upgrade-Insecure-Requests": "1"
+    },
+    "enabled": true,
+    "call_count": 2,
+    "last_used": "2026-01-12T01:59:51.631227",
+    "last_updated": "2026-01-11T18:07:49.625Z"
+  }
+}

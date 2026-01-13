@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini Cookie 同步器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>🍪 Gemini Cookie 同步</h1>
+    </header>
+
+    <!-- 标签页导航 -->
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="status">状态</button>
+      <button class="tab-btn" data-tab="accounts">账号</button>
+      <button class="tab-btn" data-tab="settings">设置</button>
+    </nav>
+
+    <!-- 状态标签页 -->
+    <div id="tab-status" class="tab-content active">
+      <!-- 状态区域 -->
+      <section class="status-section">
+        <div class="status-card">
+          <div class="status-header">
+            <span class="status-label">同步状态</span>
+            <span id="statusIndicator" class="status-indicator status-unknown">未知</span>
+          </div>
+          <div class="status-details">
+            <p id="lastSyncTime">上次同步: 从未</p>
+            <p id="cookieStatus">Cookie 状态: 检测中...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cookie 预览 -->
+      <section class="cookie-section">
+        <h2>当前 Cookie</h2>
+        <div class="cookie-item">
+          <label>__Secure-1PSID</label>
+          <code id="psidPreview">--</code>
+        </div>
+        <div class="cookie-item">
+          <label>__Secure-1PSIDTS</label>
+          <code id="psidtsPreview">--</code>
+        </div>
+      </section>
+
+      <!-- 操作按钮 -->
+      <section class="actions-section">
+        <button id="syncNow" class="btn btn-primary">
+          <span class="btn-icon">🔄</span> 立即同步
+        </button>
+        <button id="testConnection" class="btn btn-outline">
+          <span class="btn-icon">🔌</span> 测试连接
+        </button>
+      </section>
+
+      <!-- 日志区域 -->
+      <section class="log-section">
+        <h2>📋 日志</h2>
+        <div id="logContainer" class="log-container">
+          <p class="log-empty">暂无日志</p>
+        </div>
+        <button id="clearLog" class="btn btn-text">清空日志</button>
+      </section>
+    </div>
+
+    <!-- 账号标签页 -->
+    <div id="tab-accounts" class="tab-content">
+      <section class="account-section">
+        <h2>📝 账号配置</h2>
+        <p class="help-text">为当前 Cookie 设置别名和代理，方便多账号管理</p>
+
+        <div class="form-group">
+          <label for="accountAlias">账号别名</label>
+          <input type="text" id="accountAlias" placeholder="如：工作账号、个人账号">
+        </div>
+
+        <div class="form-group">
+          <label for="accountProxy">代理地址</label>
+          <input type="text" id="accountProxy" placeholder="如：http://127.0.0.1:7890">
+          <span class="input-hint">留空表示不使用代理</span>
+        </div>
+
+        <button id="saveAccount" class="btn btn-primary" style="width:100%">
+          <span class="btn-icon">💾</span> 保存并上传
+        </button>
+      </section>
+
+      <!-- 已保存账号列表 -->
+      <section class="account-list-section">
+        <h2>📋 已保存账号</h2>
+        <div id="accountList" class="account-list">
+          <p class="list-empty">暂无账号，请先同步</p>
+        </div>
+        <button id="refreshAccounts" class="btn btn-text">
+          <span class="btn-icon">🔄</span> 刷新列表
+        </button>
+      </section>
+    </div>
+
+    <!-- 设置标签页 -->
+    <div id="tab-settings" class="tab-content">
+      <section class="settings-section">
+        <h2>⚙️ 服务器设置</h2>
+
+        <div class="form-group">
+          <label for="serverUrl">服务器 URL</label>
+          <input type="url" id="serverUrl" placeholder="http://localhost:8001/api/cookies">
+        </div>
+
+        <div class="form-group">
+          <label for="refreshInterval">刷新间隔 (分钟)</label>
+          <input type="number" id="refreshInterval" min="1" max="60" value="5">
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label>
+            <input type="checkbox" id="autoSync" checked>
+            启用自动同步
+          </label>
+        </div>
+
+        <button id="saveSettings" class="btn btn-secondary">保存设置</button>
+      </section>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>

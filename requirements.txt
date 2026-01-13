@@ -1,0 +1,12 @@
+# Server dependencies
+fastapi
+uvicorn
+pydantic
+supabase
+sse-starlette
+python-multipart
+# Gemini API Client dependencies
+httpx[socks]
+orjson
+loguru
+requests
