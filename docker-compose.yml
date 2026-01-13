@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  gemini-api:
+    build: .
+    container_name: gemini-api-server
+    ports:
+      - "8001:8001"
+    environment:
+      # Ensure these are set in your .env file or system environment
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - IMAGE_EXPIRY_HOURS=${IMAGE_EXPIRY_HOURS:-24}
+    volumes:
+      # Persist generated images
+      - ./static/images:/app/static/images
+    restart: unless-stopped
