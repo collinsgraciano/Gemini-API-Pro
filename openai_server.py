@@ -334,6 +334,73 @@ async def edit_image(
         # Uploaded file is kept in static/images and cleaned up by background task
         await client.close()
 
+@app.post("/v1/images/edits/multi")
+async def edit_image_multi(
+    images: List[UploadFile] = File(...),
+    prompt: str = Form(...),
+    model: Optional[str] = Form("g3-img-pro"),
+    n: int = Form(1),
+    size: str = Form("1024x1024"),
+    response_format: str = Form("url"),
+    user: Optional[str] = Form(None),
+    req: Request = None
+):
+    """
+    Handle Image-to-Image with MULTIPLE reference images.
+    Upload multiple images and generate a new one based on them.
+    """
+    client = get_gemini_client()
+    await init_client(client)
+    
+    temp_paths = []
+    
+    try:
+        # Save all uploaded files
+        for image in images:
+            temp_path = Path(f"static/images/upload_{uuid.uuid4()}.png")
+            with open(temp_path, "wb") as buffer:
+                shutil.copyfileobj(image.file, buffer)
+            temp_paths.append(str(temp_path))
+            
+        print(f"🎨 Multi-Image Edit Prompt: {prompt} (Files: {len(temp_paths)}, Model: {model})")
+        
+        chat = client.start_chat()
+        response = await chat.send_message(
+            prompt,
+            files=temp_paths,
+            image_mode=ImageMode.PRO
+        )
+        
+        data = []
+        if response.images:
+            for img in response.images:
+                # Save locally
+                filename = f"edit_{uuid.uuid4()}.png"
+                await img.save(path="static/images", filename=filename, skip_invalid_filename=True)
+                
+                # Construct local URL
+                base_url = str(req.base_url) if req else f"http://{HOST}:{PORT}/"
+                local_url = f"{base_url}static/images/{filename}"
+
+                data.append({
+                    "url": local_url,
+                    "revised_prompt": prompt
+                })
+        else:
+             raise HTTPException(status_code=400, detail=response.text or "No image generated from multi-edit")
+             
+        return {
+            "created": int(time.time()),
+            "data": data
+        }
+
+    except Exception as e:
+        print(f"❌ Multi-Image Edit Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Uploaded files are kept in static/images and cleaned up by background task
+        await client.close()
+
 @app.get("/v1/models")
 async def list_models():
     """List available models."""
