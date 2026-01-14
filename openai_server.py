@@ -230,44 +230,68 @@ def extract_content_and_files(messages: List[ChatMessage]) -> Tuple[str, List[st
 async def generate_images(request: ImageGenerationRequest, req: Request):
     """
     Handle Text-to-Image generation.
+    Includes retry logic for rate limit errors.
     """
-    client = get_gemini_client()
-    await init_client(client)
+    MAX_RETRIES = 3
+    RETRY_DELAY = 5  # seconds
     
-    try:
-        print(f"🎨 Image Gen Prompt: {request.prompt} (Model: {request.model})")
-        # Pass model if underlying lib supports it, or just log usage
-        response = await client.generate_content(request.prompt,image_mode=ImageMode.PRO)
-        
-        data = []
-        if response.images:
-            for img in response.images:
-                # Save locally
-                filename = f"gen_{uuid.uuid4()}.png"
-                await img.save(path="static/images", filename=filename, skip_invalid_filename=True)
-                
-                # Construct local URL
-                # req.base_url gives e.g. http://localhost:8001/
-                local_url = f"{req.base_url}static/images/{filename}"
-                
-                data.append({
-                    "url": local_url,
-                    "revised_prompt": request.prompt
-                })
-        else:
-            # Fallback check if text contains refusal
-            raise HTTPException(status_code=400, detail=response.text or "No image generated")
+    print(f"🎨 Image Gen Prompt: {request.prompt} (Model: {request.model})")
+    
+    last_error = None
+    
+    for attempt in range(1, MAX_RETRIES + 1):
+        client = None
+        try:
+            client = get_gemini_client()
+            await init_client(client)
             
-        return {
-            "created": int(time.time()),
-            "data": data
-        }
+            response = await client.generate_content(request.prompt, image_mode=ImageMode.PRO)
             
-    except Exception as e:
-        print(f"❌ Image Gen Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        await client.close()
+            data = []
+            if response.images:
+                for img in response.images:
+                    filename = f"gen_{uuid.uuid4()}.png"
+                    await img.save(path="static/images", filename=filename, skip_invalid_filename=True)
+                    
+                    local_url = f"{req.base_url}static/images/{filename}"
+                    
+                    data.append({
+                        "url": local_url,
+                        "revised_prompt": request.prompt
+                    })
+                    
+                return {
+                    "created": int(time.time()),
+                    "data": data
+                }
+            else:
+                error_text = response.text or "No image generated"
+                if "ask me again later" in error_text.lower() or "more images than usual" in error_text.lower():
+                    print(f"⚠️ Rate limited (attempt {attempt}/{MAX_RETRIES}), retrying in {RETRY_DELAY}s...")
+                    last_error = error_text
+                    await asyncio.sleep(RETRY_DELAY)
+                    continue
+                else:
+                    raise HTTPException(status_code=400, detail=error_text)
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            error_str = str(e)
+            if "ask me again later" in error_str.lower() or "more images than usual" in error_str.lower():
+                print(f"⚠️ Rate limited (attempt {attempt}/{MAX_RETRIES}), retrying in {RETRY_DELAY}s...")
+                last_error = error_str
+                await asyncio.sleep(RETRY_DELAY)
+                continue
+            else:
+                print(f"❌ Image Gen Error: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            if client:
+                await client.close()
+    
+    print(f"❌ Image Gen Failed after {MAX_RETRIES} retries")
+    raise HTTPException(status_code=500, detail=f"Rate limited after {MAX_RETRIES} retries: {last_error}")
 
 @app.post("/v1/images/edits")
 async def edit_image(
@@ -279,60 +303,84 @@ async def edit_image(
     size: str = Form("1024x1024"),
     response_format: str = Form("url"),
     user: Optional[str] = Form(None),
-    req: Request = None # Add Request for base_url
+    req: Request = None
 ):
     """
     Handle Image-to-Image (Edit).
     Maps to Gemini Chat with file upload.
+    Includes retry logic for rate limit errors.
     """
-    client = get_gemini_client()
-    await init_client(client)
+    MAX_RETRIES = 3
+    RETRY_DELAY = 5  # seconds
     
+    # Save uploaded file first (only once)
     temp_path = Path(f"static/images/upload_{uuid.uuid4()}.png")
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(image.file, buffer)
+        
+    print(f"🎨 Image Edit Prompt: {prompt} (File: {temp_path}, Model: {model})")
     
-    try:
-        # Save uploaded file
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
+    last_error = None
+    
+    for attempt in range(1, MAX_RETRIES + 1):
+        client = None
+        try:
+            client = get_gemini_client()
+            await init_client(client)
             
-        print(f"🎨 Image Edit Prompt: {prompt} (File: {temp_path}, Model: {model})")
-        
-        chat = client.start_chat()
-        response = await chat.send_message(
-            prompt,
-            files=[str(temp_path)],
-            image_mode=ImageMode.PRO
-        )
-        
-        data = []
-        if response.images:
-            for img in response.images:
-                # Save locally
-                filename = f"edit_{uuid.uuid4()}.png"
-                await img.save(path="static/images", filename=filename, skip_invalid_filename=True)
-                
-                # Construct local URL
-                base_url = str(req.base_url) if req else f"http://{HOST}:{PORT}/"
-                local_url = f"{base_url}static/images/{filename}"
+            chat = client.start_chat()
+            response = await chat.send_message(
+                prompt,
+                files=[str(temp_path)],
+                image_mode=ImageMode.PRO
+            )
+            
+            data = []
+            if response.images:
+                for img in response.images:
+                    filename = f"edit_{uuid.uuid4()}.png"
+                    await img.save(path="static/images", filename=filename, skip_invalid_filename=True)
+                    
+                    base_url = str(req.base_url) if req else f"http://{HOST}:{PORT}/"
+                    local_url = f"{base_url}static/images/{filename}"
 
-                data.append({
-                    "url": local_url,
-                    "revised_prompt": prompt
-                })
-        else:
-             raise HTTPException(status_code=400, detail=response.text or "No image generated from edit")
-             
-        return {
-            "created": int(time.time()),
-            "data": data
-        }
+                    data.append({
+                        "url": local_url,
+                        "revised_prompt": prompt
+                    })
+                    
+                return {
+                    "created": int(time.time()),
+                    "data": data
+                }
+            else:
+                error_text = response.text or "No image generated"
+                if "ask me again later" in error_text.lower() or "more images than usual" in error_text.lower():
+                    print(f"⚠️ Rate limited (attempt {attempt}/{MAX_RETRIES}), retrying in {RETRY_DELAY}s...")
+                    last_error = error_text
+                    await asyncio.sleep(RETRY_DELAY)
+                    continue
+                else:
+                    raise HTTPException(status_code=400, detail=error_text)
 
-    except Exception as e:
-        print(f"❌ Image Edit Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        # Uploaded file is kept in static/images and cleaned up by background task
-        await client.close()
+        except HTTPException:
+            raise
+        except Exception as e:
+            error_str = str(e)
+            if "ask me again later" in error_str.lower() or "more images than usual" in error_str.lower():
+                print(f"⚠️ Rate limited (attempt {attempt}/{MAX_RETRIES}), retrying in {RETRY_DELAY}s...")
+                last_error = error_str
+                await asyncio.sleep(RETRY_DELAY)
+                continue
+            else:
+                print(f"❌ Image Edit Error: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            if client:
+                await client.close()
+    
+    print(f"❌ Image Edit Failed after {MAX_RETRIES} retries")
+    raise HTTPException(status_code=500, detail=f"Rate limited after {MAX_RETRIES} retries: {last_error}")
 
 @app.post("/v1/images/edits/multi")
 async def edit_image_multi(
@@ -348,58 +396,88 @@ async def edit_image_multi(
     """
     Handle Image-to-Image with MULTIPLE reference images.
     Upload multiple images and generate a new one based on them.
+    Includes retry logic for rate limit errors.
     """
-    client = get_gemini_client()
-    await init_client(client)
+    MAX_RETRIES = 3
+    RETRY_DELAY = 5  # seconds
     
     temp_paths = []
     
-    try:
-        # Save all uploaded files
-        for image in images:
-            temp_path = Path(f"static/images/upload_{uuid.uuid4()}.png")
-            with open(temp_path, "wb") as buffer:
-                shutil.copyfileobj(image.file, buffer)
-            temp_paths.append(str(temp_path))
+    # Save all uploaded files first (only once)
+    for image in images:
+        temp_path = Path(f"static/images/upload_{uuid.uuid4()}.png")
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        temp_paths.append(str(temp_path))
+    
+    print(f"🎨 Multi-Image Edit Prompt: {prompt} (Files: {len(temp_paths)}, Model: {model})")
+    
+    last_error = None
+    
+    for attempt in range(1, MAX_RETRIES + 1):
+        client = None
+        try:
+            client = get_gemini_client()
+            await init_client(client)
             
-        print(f"🎨 Multi-Image Edit Prompt: {prompt} (Files: {len(temp_paths)}, Model: {model})")
-        
-        chat = client.start_chat()
-        response = await chat.send_message(
-            prompt,
-            files=temp_paths,
-            image_mode=ImageMode.PRO
-        )
-        
-        data = []
-        if response.images:
-            for img in response.images:
-                # Save locally
-                filename = f"edit_{uuid.uuid4()}.png"
-                await img.save(path="static/images", filename=filename, skip_invalid_filename=True)
-                
-                # Construct local URL
-                base_url = str(req.base_url) if req else f"http://{HOST}:{PORT}/"
-                local_url = f"{base_url}static/images/{filename}"
+            chat = client.start_chat()
+            response = await chat.send_message(
+                prompt,
+                files=temp_paths,
+                image_mode=ImageMode.PRO
+            )
+            
+            data = []
+            if response.images:
+                for img in response.images:
+                    # Save locally
+                    filename = f"edit_{uuid.uuid4()}.png"
+                    await img.save(path="static/images", filename=filename, skip_invalid_filename=True)
+                    
+                    # Construct local URL
+                    base_url = str(req.base_url) if req else f"http://{HOST}:{PORT}/"
+                    local_url = f"{base_url}static/images/{filename}"
 
-                data.append({
-                    "url": local_url,
-                    "revised_prompt": prompt
-                })
-        else:
-             raise HTTPException(status_code=400, detail=response.text or "No image generated from multi-edit")
-             
-        return {
-            "created": int(time.time()),
-            "data": data
-        }
+                    data.append({
+                        "url": local_url,
+                        "revised_prompt": prompt
+                    })
+                    
+                return {
+                    "created": int(time.time()),
+                    "data": data
+                }
+            else:
+                # Check if it's a rate limit / overload error
+                error_text = response.text or "No image generated"
+                if "ask me again later" in error_text.lower() or "more images than usual" in error_text.lower():
+                    print(f"⚠️ Rate limited (attempt {attempt}/{MAX_RETRIES}), retrying in {RETRY_DELAY}s...")
+                    last_error = error_text
+                    await asyncio.sleep(RETRY_DELAY)
+                    continue
+                else:
+                    raise HTTPException(status_code=400, detail=error_text)
 
-    except Exception as e:
-        print(f"❌ Multi-Image Edit Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        # Uploaded files are kept in static/images and cleaned up by background task
-        await client.close()
+        except HTTPException:
+            raise
+        except Exception as e:
+            error_str = str(e)
+            # Check if retriable error
+            if "ask me again later" in error_str.lower() or "more images than usual" in error_str.lower():
+                print(f"⚠️ Rate limited (attempt {attempt}/{MAX_RETRIES}), retrying in {RETRY_DELAY}s...")
+                last_error = error_str
+                await asyncio.sleep(RETRY_DELAY)
+                continue
+            else:
+                print(f"❌ Multi-Image Edit Error: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            if client:
+                await client.close()
+    
+    # All retries exhausted
+    print(f"❌ Multi-Image Edit Failed after {MAX_RETRIES} retries")
+    raise HTTPException(status_code=500, detail=f"Rate limited after {MAX_RETRIES} retries: {last_error}")
 
 @app.get("/v1/models")
 async def list_models():
